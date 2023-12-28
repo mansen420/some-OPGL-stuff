@@ -16,11 +16,13 @@ constexpr int WINDOW_W = aspect_ratio * WINDOW_H;
 static object_3D::object my_object; 
 static object_3D::array_drawable* cube_ptr;
 static object_3D::array_drawable* plane_ptr;
+static object_3D::array_drawable* screen_tex_ptr;
 static GLFWwindow* myWindow;
 
-static unsigned int program_ids[10];    //TODO should support dynamic id numbers
+static unsigned int program_ids[10];
 static unsigned int VAO_ids[10];
 static unsigned int tex_ids[10];
+static unsigned int framebuffer_ids[10];
 
 static glm::vec3 cam_pos(0, 0, 1);
 static glm::vec3 cam_front(0, 0, -1);
@@ -45,13 +47,14 @@ int main()
     }
     {   //link shaders using a single vertex shader id. Program switching is expensive.
         //the same shader can be attached to multiple programs, and the inverse is true.
-        unsigned int vShader, fShader, fShader2;
+        unsigned int vShader, fShader, screen_v, screen_f;
         bool shaders_made = 
         compileShaderFromPath(VERTEX_SHADER, vShader, "src/vShader.vert") &&
         compileShaderFromPath(FRAGMENT_SHADER, fShader, "src/fShader.frag")&&
-        compileShaderFromPath(FRAGMENT_SHADER, fShader2, "src/fShader2.frag")&&
+        compileShaderFromPath(VERTEX_SHADER, screen_v, "src/screen_vshader.vert") &&
+        compileShaderFromPath(FRAGMENT_SHADER, screen_f, "src/screen_fshader.frag") &&
         linkShaders(program_ids[0], vShader, fShader) &&
-        linkShaders(program_ids[1], vShader, fShader2);
+        linkShaders(program_ids[1], screen_v, screen_f);
         if (!shaders_made)
         {
             glfwTerminate();
@@ -59,8 +62,54 @@ int main()
         }
         glDeleteShader(vShader);
         glDeleteShader(fShader);
-        glDeleteShader(fShader2);
+        glDeleteShader(screen_v);
+        glDeleteShader(screen_f);
     }
+    //****************************************
+    glGenFramebuffers(1, &framebuffer_ids[0]);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_ids[0]);
+
+    glGenTextures(1, &tex_ids[2]);
+    glBindTexture(GL_TEXTURE_2D, tex_ids[2]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WINDOW_W, WINDOW_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex_ids[2], 0);
+    
+    unsigned int rndr_bfr_id;
+    glGenRenderbuffers(1, &rndr_bfr_id);
+    glBindRenderbuffer(GL_RENDERBUFFER, rndr_bfr_id);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, WINDOW_W, WINDOW_H);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rndr_bfr_id);   
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cout << "framebuffer incomplete!" << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    //****************************************
+    float screen_vertices[] = {
+    // positions
+                   // texCoords
+    -1.0f,  1.0f,  0.0f, 1.0f, 
+    -1.0f, -1.0f,  0.0f, 0.0f,
+     1.0f, -1.0f,  1.0f, 0.0f, 
+
+    -1.0f,  1.0f,  0.0f, 1.0f, 
+     1.0f,  1.0f,  1.0f, 1.0f, 
+     1.0f, -1.0f,  1.0f, 0.0f
+    };
+    object_3D::array_drawable screen_texture(screen_vertices, sizeof(screen_vertices), false, true);
+    screen_texture.pos_dimension = 2;
+    screen_texture.textures.diffuse_map.id = tex_ids[2];
+    screen_tex_ptr = &screen_texture;
+    screen_texture.send_data();
+    //****************************************
     gen_texture("marble.jpg", tex_ids[0]);
     gen_texture("metal.png", tex_ids[1]);
     if (!read_obj("backpack_model/backpack.obj", my_object))
@@ -68,7 +117,7 @@ int main()
         glfwTerminate();
         return -1;
     }
-    //sendVertexData();
+
     float planeVertices[] = {
         // positions          // texture Coords (note we set these higher than 1 (together with GL_REPEAT as texture wrapping mode). this will cause the floor texture to repeat)
          5.0f, -0.5f,  5.0f,  2.0f, 0.0f,
@@ -133,11 +182,6 @@ int main()
     cube_ptr = &cube;
     plane_ptr = &plane;
     my_object.send_data();
-    //renderloop
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_STENCIL_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
     float previous_frame_time = 0.0;
     float fps_sum = 0.0;
@@ -179,16 +223,29 @@ inline void send_light_info()
 }
 void render()
 {
-    //glClearColor(0.65f, 0.45f, 0.75f, 1.f);
-    glClearColor(0.1f, 0.1f, 0.1f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    //render to screen
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glClearColor(1.0, 1.0, 1.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+    screen_tex_ptr->draw(program_ids[1]);
 
+    //render off-screen 
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_ids[0]);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.f);
+    glEnable(GL_DEPTH_TEST);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glUseProgram(program_ids[0]);
     light_pos = glm::vec3(3*sin(glfwGetTime()), 0, 3*cos(glfwGetTime()));
     send_light_info();
     send_transforms();
     //draw plane
     plane_ptr->draw(program_ids[0]);
     //draw cube
+    cube_ptr->model_transform = glm::mat4(1.0);
+    cube_ptr->draw(program_ids[0]);
+    cube_ptr->model_transform = glm::translate(glm::mat4(1.0), glm::vec3(0.0, 1.0, 0.0));
     cube_ptr->draw(program_ids[0]);
     //draw backpack 
     my_object.model_transform = glm::translate(glm::mat4(1.0), glm::vec3(0.25, 0, 0));  
