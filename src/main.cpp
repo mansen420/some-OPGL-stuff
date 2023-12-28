@@ -223,11 +223,17 @@ inline void send_light_info()
 }
 void render()
 {
-    //render to screen
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glClearColor(1.0, 1.0, 1.0, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.f);
+    glEnable(GL_DEPTH_TEST);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    send_transforms();
+    cube_ptr->draw(program_ids[0]);
+    my_object.draw(program_ids[0]);
+
+    //render to screen
     glDisable(GL_DEPTH_TEST);
+    screen_tex_ptr->model_transform = glm::scale(glm::mat4(1.0), glm::vec3(0.55));   
     screen_tex_ptr->draw(program_ids[1]);
 
     //render off-screen 
@@ -238,8 +244,10 @@ void render()
 
     glUseProgram(program_ids[0]);
     light_pos = glm::vec3(3*sin(glfwGetTime()), 0, 3*cos(glfwGetTime()));
+    cam_front *= -1;
     send_light_info();
     send_transforms();
+    cam_front *= -1;
     //draw plane
     plane_ptr->draw(program_ids[0]);
     //draw cube
