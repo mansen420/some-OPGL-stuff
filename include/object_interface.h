@@ -200,7 +200,7 @@ namespace object_3D
         virtual void gl_draw(const unsigned int &program_id) const override
         {
             const size_t nr_floats = size_t(array_size/sizeof(float));
-            const unsigned int nr_floats_per_vertex = 3 + (2*texture) + (3*normals);
+            const unsigned int nr_floats_per_vertex = pos_dimension + (tex_dimension*texture) + (normals_dimension*normals);
             glDrawArrays(GL_TRIANGLES, 0, nr_floats/nr_floats_per_vertex);
         }
         virtual void set_samplers(const unsigned int &program_id) const 
@@ -234,7 +234,9 @@ namespace object_3D
 
         mat4 model_transform;
         material textures;
-
+        unsigned int pos_dimension = 3;
+        unsigned int normals_dimension = 3;
+        unsigned int tex_dimension = 2;
         virtual void send_data() override
         {
             unsigned int VBO;
@@ -245,12 +247,12 @@ namespace object_3D
             glGenVertexArrays(1, &VAO_id);
             glBindVertexArray(VAO_id);
             
-            const int nr_floats_per_vertex = (3 + (2*texture) + (3*normals));
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, nr_floats_per_vertex * sizeof(float), (void*)0);
+            const int nr_floats_per_vertex = (pos_dimension + (tex_dimension*texture) + (normals_dimension*normals));
+            glVertexAttribPointer(0, pos_dimension, GL_FLOAT, GL_FALSE, nr_floats_per_vertex * sizeof(float), (void*)0);
             glEnableVertexAttribArray(0);
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, nr_floats_per_vertex * sizeof(float), (void*)(3*sizeof(float)));
+            glVertexAttribPointer(1, normals_dimension, GL_FLOAT, GL_FALSE, nr_floats_per_vertex * sizeof(float), (void*)(pos_dimension*sizeof(float)));
             glEnableVertexAttribArray(1*normals);
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, nr_floats_per_vertex * sizeof(float), (void*)((3+3*normals)*sizeof(float)));
+            glVertexAttribPointer(2, tex_dimension, GL_FLOAT, GL_FALSE, nr_floats_per_vertex * sizeof(float), (void*)((pos_dimension+normals_dimension*normals)*sizeof(float)));
             glEnableVertexAttribArray(2*texture);
         
             glBindVertexArray(0);
