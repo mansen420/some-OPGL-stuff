@@ -16,6 +16,7 @@ constexpr int WINDOW_W = aspect_ratio * WINDOW_H;
 static object_3D::object my_object; 
 static object_3D::array_drawable* cube_ptr;
 static object_3D::array_drawable* plane_ptr;
+static object_3D::array_drawable* skybox_ptr;
 static GLFWwindow* myWindow;
 
 static unsigned int program_ids[10];    //TODO should support dynamic id numbers
@@ -45,13 +46,14 @@ int main()
     }
     {   //link shaders using a single vertex shader id. Program switching is expensive.
         //the same shader can be attached to multiple programs, and the inverse is true.
-        unsigned int vShader, fShader, fShader2;
+        unsigned int vShader, fShader, cubemap_v, cubemap_f;
         bool shaders_made = 
         compileShaderFromPath(VERTEX_SHADER, vShader, "src/vShader.vert") &&
         compileShaderFromPath(FRAGMENT_SHADER, fShader, "src/fShader.frag")&&
-        compileShaderFromPath(FRAGMENT_SHADER, fShader2, "src/fShader2.frag")&&
+        compileShaderFromPath(VERTEX_SHADER, cubemap_v, "src/cubemap.vert")&&
+        compileShaderFromPath(FRAGMENT_SHADER, cubemap_f, "src/cubemap.frag")&&
         linkShaders(program_ids[0], vShader, fShader) &&
-        linkShaders(program_ids[1], vShader, fShader2);
+        linkShaders(program_ids[1], cubemap_v, cubemap_f);
         if (!shaders_made)
         {
             glfwTerminate();
@@ -59,10 +61,76 @@ int main()
         }
         glDeleteShader(vShader);
         glDeleteShader(fShader);
-        glDeleteShader(fShader2);
+        glDeleteShader(cubemap_v);
+        glDeleteShader(cubemap_f);
     }
     gen_texture("marble.jpg", tex_ids[0]);
     gen_texture("metal.png", tex_ids[1]);
+    //***********************************************
+    std::vector<std::string> cubemap_faces  //order matters here
+    {
+        "skybox/right.jpg",
+        "skybox/left.jpg",
+        "skybox/top.jpg",
+        "skybox/bottom.jpg",
+        "skybox/front.jpg",
+        "skybox/back.jpg"
+    };
+    if(!gen_cubemap(cubemap_faces, tex_ids[2]))
+    {
+        glfwTerminate();
+        return -1;
+    }
+    float skyboxVertices[] = {
+        // positions          
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
+    object_3D::array_drawable skybox(skyboxVertices, sizeof(skyboxVertices), false, false);
+    skybox.cubemap = true;    //quickfix
+    skybox.textures.cube_map.id = tex_ids[2];
+    skybox.send_data();
+    skybox_ptr = &skybox;
+    //***********************************************
     if (!read_obj("backpack_model/backpack.obj", my_object))
     {
         glfwTerminate();
@@ -134,9 +202,6 @@ int main()
     my_object.send_data();
     //renderloop
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_STENCIL_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
     float previous_frame_time = 0.0;
     float fps_sum = 0.0;
@@ -159,15 +224,15 @@ int main()
     glfwTerminate();
     return 0;
 }
-inline void send_transforms()
+inline void send_transforms(const unsigned int &program_id)
 {
     using namespace glm;
     mat4 view(1.0f);
     view = lookAt(cam_pos, cam_pos + cam_front, cam_up);
     mat4 projection = perspective(radians(45.f), float(WINDOW_W)/WINDOW_H, 0.1f, 100.f);
-    
-    glUniformMatrix4fv(glGetUniformLocation(program_ids[0], "view_transform"), 1, GL_FALSE, value_ptr(view));
-    glUniformMatrix4fv(glGetUniformLocation(program_ids[0], "projection_transform"), 1, GL_FALSE, value_ptr(projection));
+    glUseProgram(program_id);
+    glUniformMatrix4fv(glGetUniformLocation(program_id, "view_transform"), 1, GL_FALSE, value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(program_id, "projection_transform"), 1, GL_FALSE, value_ptr(projection));
 }
 static glm::vec3 light_pos(0, 0, 1.2);
 inline void send_light_info()
@@ -178,13 +243,17 @@ inline void send_light_info()
 }
 void render()
 {
-    //glClearColor(0.65f, 0.45f, 0.75f, 1.f);
     glClearColor(0.1f, 0.1f, 0.1f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+
+    glDepthMask(GL_FALSE);
+    send_transforms(program_ids[1]);
+    skybox_ptr->draw(program_ids[1]);
+    glDepthMask(GL_TRUE);
 
     light_pos = glm::vec3(3*sin(glfwGetTime()), 0, 3*cos(glfwGetTime()));
-    send_light_info();
-    send_transforms();
+    //send_light_info();
+    send_transforms(program_ids[0]);
     //draw plane
     plane_ptr->draw(program_ids[0]);
     //draw cube
