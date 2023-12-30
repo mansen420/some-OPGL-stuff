@@ -9,5 +9,5 @@ void main()
 {   
     tex_coords = cube_pos;
     mat4 view_transform_no_translate = mat4(mat3(view_transform));
-    gl_Position = projection_transform*view_transform_no_translate*vec4(cube_pos, 1.0);
+    gl_Position = (projection_transform*view_transform_no_translate*vec4(cube_pos, 1.0)).xyww;  //z == w --> w/z == 1.0 == maximum depth value
 }

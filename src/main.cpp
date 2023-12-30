@@ -235,32 +235,31 @@ inline void send_transforms(const unsigned int &program_id)
     glUniformMatrix4fv(glGetUniformLocation(program_id, "projection_transform"), 1, GL_FALSE, value_ptr(projection));
 }
 static glm::vec3 light_pos(0, 0, 1.2);
-inline void send_light_info()
+inline void send_light_info(const unsigned int &program_id)
 {
-    glUniform3f(glGetUniformLocation(program_ids[0], "lights[0].color"), 1.0, 1.0, 1.0);
-    glUniform4f(glGetUniformLocation(program_ids[0], "lights[0].pos"), light_pos.x, light_pos.y, light_pos.z, 1);
-    glUniform3f(glGetUniformLocation(program_ids[0], "eye_pos"), cam_pos.x, cam_pos.y, cam_pos.z);
+    glUseProgram(program_id);
+    glUniform3f(glGetUniformLocation(program_id, "lights[0].color"), 1.0, 1.0, 1.0);
+    glUniform4f(glGetUniformLocation(program_id, "lights[0].pos"), light_pos.x, light_pos.y, light_pos.z, 1);
+    glUniform3f(glGetUniformLocation(program_id, "eye_pos"), cam_pos.x, cam_pos.y, cam_pos.z);
 }
 void render()
 {
     glClearColor(0.1f, 0.1f, 0.1f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
-    glDepthMask(GL_FALSE);
-    send_transforms(program_ids[1]);
-    skybox_ptr->draw(program_ids[1]);
-    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LEQUAL); //for the skybox
 
     light_pos = glm::vec3(3*sin(glfwGetTime()), 0, 3*cos(glfwGetTime()));
-    //send_light_info();
+    send_light_info(program_ids[0]);
     send_transforms(program_ids[0]);
     //draw plane
-    plane_ptr->draw(program_ids[0]);
+    //plane_ptr->draw(program_ids[0]);
     //draw cube
     cube_ptr->draw(program_ids[0]);
     //draw backpack 
-    my_object.model_transform = glm::translate(glm::mat4(1.0), glm::vec3(0.25, 0, 0));  
+    my_object.model_transform = glm::translate(glm::mat4(1.0), glm::vec3(1.25, 0, 0));  
     my_object.draw(program_ids[0]);
+    send_transforms(program_ids[1]);
+    skybox_ptr->draw(program_ids[1]);
 }
 void frame_buffer_callback(GLFWwindow* window, int width, int height)
 {

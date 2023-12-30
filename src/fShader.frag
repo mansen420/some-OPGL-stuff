@@ -11,9 +11,7 @@ uniform sampler2D spec_maps[16];
 uniform int nr_valid_diffuse_maps;
 uniform int nr_valid_spec_maps;
 
-uniform sampler2D tex_sampler0;
-uniform sampler2D tex_sampler1;
-uniform sampler2D tex_sampler2;
+uniform samplerCube cubemap;
 
 struct light 
 {
@@ -70,7 +68,9 @@ void main()
     sunlight.color = vec3(1.0, 0.85, 0.65);
     light_output += shade_directional(sunlight);
 
-    fragment_output = diffuse_map;
+    vec3 I = normalize(frag_pos-eye_pos);
+    vec3 R = reflect(I, normalize(surface_normal));
+    fragment_output = texture(cubemap, R);
 }
 float spec(vec3 light_dir)
 {   //expects light_dir TOWARDS the surface
