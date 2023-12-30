@@ -66,7 +66,8 @@ namespace object_3D
     enum texture_type_option
     {
         DIFFUSE,
-        SPECULAR
+        SPECULAR,
+        CUBEMAP
     };
     struct texture
     {
@@ -77,7 +78,8 @@ namespace object_3D
     {
         texture diffuse_map;
         texture spec_map;
-        material() {spec_map.type=SPECULAR, diffuse_map.type=DIFFUSE;}
+        texture cube_map;
+        material() {spec_map.type=SPECULAR, diffuse_map.type=DIFFUSE, cube_map.type=CUBEMAP;}
     };
     
     class mesh : public drawable
@@ -193,9 +195,8 @@ namespace object_3D
     {
         const float* const vertices;
         unsigned int VAO_id;
-        const int array_size;
+        const size_t array_size;
         bool texture, normals;
-
         virtual void bind_VAO() const override {glBindVertexArray(VAO_id);}
         virtual void gl_draw(const unsigned int &program_id) const override
         {
@@ -205,6 +206,13 @@ namespace object_3D
         }
         virtual void set_samplers(const unsigned int &program_id) const 
         {
+            if (cubemap)
+            {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, textures.cube_map.id);
+                glUniform1i(glGetUniformLocation(program_id, "cubemap"), 0);
+                return;
+            }
             if (textures.diffuse_map.id > 0)
             {
                 glActiveTexture(GL_TEXTURE0);
@@ -228,7 +236,7 @@ namespace object_3D
             glUniformMatrix4fv(glGetUniformLocation(program_id, VS_TRNSFRM_MDL_NAME), 1, GL_FALSE, value_ptr(model_transform));
         }
         public :
-        array_drawable(const float* const vertices, const int array_byte_size, bool has_normal_coords = true, 
+        array_drawable(const float* const vertices, const size_t array_byte_size, bool has_normal_coords = true, 
         bool has_texture_coords = true): vertices(vertices), array_size(array_byte_size), texture(has_texture_coords), 
         normals(has_normal_coords), model_transform(mat4(1.0)) {}
 
@@ -237,6 +245,7 @@ namespace object_3D
         unsigned int pos_dimension = 3;
         unsigned int normals_dimension = 3;
         unsigned int tex_dimension = 2;
+        bool cubemap = false;
         virtual void send_data() override
         {
             unsigned int VBO;
@@ -386,28 +395,29 @@ bool gen_texture(const char* file_path, unsigned int &tex_id)
     std::cout << "Loaded texture : " << file_path <<std::endl;
     return true;
 }
-bool gen_cubemap(const std::vector<std::string> &file_paths, unsigned int cubemap_tex_id)
+bool gen_cubemap(const std::vector<std::string> &file_paths, unsigned int &cubemap_tex_id)
 {
-    stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load(false);
     glGenTextures(0, &cubemap_tex_id);
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_tex_id);
-    int img_width, img_height, img_nrChannels;
-    unsigned char* data;
     for (size_t i = 0; i < file_paths.size(); i++)
     {
-        data = stbi_load(file_paths[i].c_str(), &img_width, &img_height, &img_nrChannels,
-        0);
+        int img_width, img_height, img_nrChannels;
+        unsigned char* data = stbi_load(file_paths[i].c_str(), &img_width, &img_height,
+        &img_nrChannels,0);
         if(!data)
         {
             std::cerr << "reading texture file failed : " << file_paths[i] << std::endl;
+            stbi_image_free(data);
             return false;
         }
         std::cout << "Loaded texture : " << file_paths[i] <<std::endl;
         GLenum format = img_nrChannels == 3 ? GL_RGB : GL_RGBA;
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+i, 0, format, img_width, img_height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+i, 0, format, img_width, img_height, 0, format,
+        GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+        stbi_image_free(data);
     }
-    stbi_image_free(data);
     return true;
 }
 #endif
