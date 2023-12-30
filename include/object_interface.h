@@ -386,4 +386,28 @@ bool gen_texture(const char* file_path, unsigned int &tex_id)
     std::cout << "Loaded texture : " << file_path <<std::endl;
     return true;
 }
+bool gen_cubemap(const std::vector<std::string> &file_paths, unsigned int cubemap_tex_id)
+{
+    stbi_set_flip_vertically_on_load(true);
+    glGenTextures(0, &cubemap_tex_id);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap_tex_id);
+    int img_width, img_height, img_nrChannels;
+    unsigned char* data;
+    for (size_t i = 0; i < file_paths.size(); i++)
+    {
+        data = stbi_load(file_paths[i].c_str(), &img_width, &img_height, &img_nrChannels,
+        0);
+        if(!data)
+        {
+            std::cerr << "reading texture file failed : " << file_paths[i] << std::endl;
+            return false;
+        }
+        std::cout << "Loaded texture : " << file_paths[i] <<std::endl;
+        GLenum format = img_nrChannels == 3 ? GL_RGB : GL_RGBA;
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+i, 0, format, img_width, img_height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    stbi_image_free(data);
+    return true;
+}
 #endif
